@@ -9,7 +9,12 @@ import {
   FlatList,
   Pressable,
   Alert,
+  Dimensions,
 } from 'react-native';
+
+import DropDownPicker from 'react-native-dropdown-picker';
+
+import DatePicker from './components/DatePicker';
 
 import { 
   FontAwesome, 
@@ -38,6 +43,19 @@ export default function App() {
   const [liters, setLiters] = useState(null);
   const [fillingUps, setFillingUps] = useState([]);
 
+  // DropDownPicker
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([
+      {label: 'Gasolina', value: 'Gasolina'},
+      {label: 'Álcool', value: 'Álcool'},
+      {label: 'Diesel', value: 'Diesel'},
+  ]);
+
+  // Função para converter string de data DD/MM/YYYY para objeto Date
+  const parseDate = (dateString) => {
+    const [day, month, year] = dateString.split('/').map(num => parseInt(num));
+    return new Date(year, month - 1, day);
+  };
 
   // Função para obter os dados do banco
   const getData = async () => {
@@ -66,6 +84,13 @@ export default function App() {
       // console.log(`${doc.id} - ${doc.data().date} - ${doc.data().fuel} - ${doc.data().km} - ${doc.data().liters} - ${doc.data().autonomy}`);
     });
 
+    newFillingUps.sort((a, b) => {
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
+      return dateA - dateB;  // Ordem crescente
+      // Para ordem decrescente, use: return dateB - dateA
+    });
+
     // Ao final, adiciona o array no hook
     setFillingUps(newFillingUps);
   }
@@ -77,12 +102,26 @@ export default function App() {
   }, []);
 
 
+  // coverte a data timestamp para string dd/mm/aaaa
+  const dateToString = (fullDate) => {
+    const data = new Date(fullDate);
+
+    const dia = String(data.getDate()).padStart(2, '0');
+    const mes = String(data.getMonth() + 1).padStart(2, '0'); // Os meses começam de 0
+    const ano = data.getFullYear();
+    
+    const dataFormatada = `${dia}/${mes}/${ano}`;
+
+    return dataFormatada;
+    
+  }
+
+
   // Função para salvar um novo item no banco
   const saveFillUp = async () => {
     try {
-
       const newFillUpRef = await addDoc(collection(db, "fillingup"), {
-        date,
+        date: dateToString(date),
         fuel,
         km,
         liters,
@@ -92,15 +131,22 @@ export default function App() {
       // Criar um novo objeto com o ID do documento recém-criado
       const newFillUp = {
         id: newFillUpRef.id,
-        date,
+        date: dateToString(date),
         fuel,
         km,
         liters,
         autonomy: (Number(km) / Number(liters)).toFixed(2),
       };
 
+
+
       // Atualizar o estado fillingUps com o novo item
-      setFillingUps([...fillingUps, newFillUp]);
+      setFillingUps([...fillingUps, newFillUp].sort((a, b) => {
+        const dateA = parseDate(a.date);
+        const dateB = parseDate(b.date);
+        return dateA - dateB;  // Ordem crescente
+        // Para ordem decrescente, use: return dateB - dateA
+      }));
       
       // Limpar os campos do formulário
       clearFields();
@@ -150,6 +196,8 @@ export default function App() {
     );
   };
 
+  
+
 
   return (
     <View style={styles.container}>
@@ -160,26 +208,28 @@ export default function App() {
       <View style={styles.containerInput}>
         <FontAwesome style={styles.icon} name="calendar" size={24} color="#fff" />
         <Text style={styles.textToInput}>Data</Text>
-        <TextInput
-          style={styles.input}
-          placeholderTextColor="#888"
-          placeholder='dd/mm/aaaa'
-          keyboardType='default'
+        <DatePicker
           value={date}
-          onChangeText={(v) => setDate(v)}
+          onChange={setDate}
+          placeholderText="Selecione a data"
+          minimumDate={new Date(1900, 0, 1)}
+          maximumDate={new Date()}
         />
       </View>
 
       <View style={styles.containerInput}>
         <MaterialIcons style={styles.icon} name="local-gas-station" size={24} color="#fff" />
         <Text style={styles.textToInput}>Combustível</Text>
-        <TextInput
+        <DropDownPicker
           style={styles.input}
-          placeholderTextColor="#888"
-          placeholder='Gasolina ou Álcool'
-          keyboardType='default'
+          open={open}
           value={fuel}
-          onChangeText={(v) => setFuel(v)}
+          items={items}
+          setOpen={setOpen}
+          setValue={setFuel}
+          setItems={setItems}
+          theme="DARK"
+          placeholder={'Selecione o combustível'}
         />
       </View>
 
@@ -217,7 +267,7 @@ export default function App() {
         <Text style={styles.textButton}>Salvar</Text>
       </TouchableOpacity>
 
-      <Text style={styles.textTitle}>Histórico de Apastecimento</Text>
+      <Text style={styles.textTitle}>Histórico de Abastecimento</Text>
 
 
       <FlatList 
@@ -230,7 +280,7 @@ export default function App() {
             <Text style={styles.itemTextKm}>{Number(item.km).toFixed(1)}</Text>
             <Text style={styles.itemTextLiters}>{Number(item.liters).toFixed(1)}</Text>
             <Text style={styles.itemTextAutonomy}>{Number(item.autonomy).toFixed(1)}</Text>
-            <Pressable onPress={() => deleteFillUp(item.id)}>
+            <Pressable style={styles.itemIcon} onPress={() => deleteFillUp(item.id)}>
               <FontAwesome name="trash" size={16} color="#fff" />
             </Pressable>
           </View>
@@ -251,10 +301,13 @@ export default function App() {
   );
 }
 
+// obtém a largura a tela para ajustar as colunas
+const screenWidth = Math.round(Dimensions.get('window').width);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#404040',
+    backgroundColor: '#292d3e',
     padding: 8,
     paddingTop: 24,
   },
@@ -269,12 +322,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+    width:'100%',
   },
   icon: {
     paddingRight: 4,
   },
   textToInput: {
-    width: 110,
+    width: '30%',
     fontSize: 18,
     color: '#fff',
   },
@@ -284,7 +338,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d6d6d6',
     borderRadius: 4,
-    width: 220,
+    width: '60%',
     fontSize: 18,
     color: '#fff',
   },
@@ -309,34 +363,42 @@ const styles = StyleSheet.create({
   },
   itemTextDate: {
     color: '#fff',
-    width: 80,
+    width: screenWidth*0.18,
     textAlign: 'center',
-    paddingTop: 4,
+    paddingTop: 8,
+    fontSize: 12,
   },
   itemTextFuel: {
     color: '#fff',
-    width: 100,
+    width: screenWidth*0.25,
     textAlign: 'center',
-    fontWeight: '700'
+    paddingTop: 8,
+    fontSize: 12,
   },
   itemTextKm: {
     color: '#fff',
-    width: 40,
+    width: screenWidth*0.10,
     textAlign: 'right',
-    fontWeight: '700'
+    paddingTop: 8,
+    fontSize: 12,
   },
   itemTextLiters: {
     color: '#fff',
-    width: 50,
+    width: screenWidth*0.13,
     textAlign: 'right',
-    fontWeight: '700'
+    paddingTop: 8,
+    fontSize: 12,
   },
   itemTextAutonomy: {
     color: '#fff',
-    width: 70,
+    width: screenWidth*0.18,
     textAlign: 'right',
-    fontWeight: '700',
+    paddingTop: 8,
     marginRight: 25,
+    fontSize: 12,
+  },
+  itemIcon: {
+    paddingTop: 8,
   },
 
 
@@ -346,32 +408,37 @@ const styles = StyleSheet.create({
   },
   headerTextDate: {
     color: '#fff',
-    width: 80,
+    width: screenWidth*0.18,
     textAlign: 'center',
-    fontWeight: '700'
+    fontWeight: '700',
+    fontSize: 12,
   },
   headerTextFuel: {
     color: '#fff',
-    width: 95,
+    width: screenWidth*0.25,
     textAlign: 'center',
-    fontWeight: '700'
+    fontWeight: '700',
+    fontSize: 12,
   },
   headerTextKm: {
     color: '#fff',
-    width: 50,
+    width: screenWidth*0.10,
     textAlign: 'center',
-    fontWeight: '700'
+    fontWeight: '700',
+    fontSize: 12,
   },
   headerTextLiters: {
     color: '#fff',
-    width: 50,
+    width: screenWidth*0.18,
     textAlign: 'center',
-    fontWeight: '700'
+    fontWeight: '700',
+    fontSize: 12,
   },
   headerTextAutonomy: {
     color: '#fff',
-    width: 80,
+    width: screenWidth*0.17,
     textAlign: 'center',
-    fontWeight: '700'
+    fontWeight: '700',
+    fontSize: 12,
   },
 });
